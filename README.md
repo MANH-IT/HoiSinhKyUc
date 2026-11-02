@@ -5,21 +5,90 @@ Phục chế, tô màu và tái tạo chân dung liệt sĩ / chiến sĩ đã m
 > Dự án kết hợp Xử lý ảnh số, Thị giác máy tính, Deep Learning và giá trị nhân văn:
 > giúp các gia đình có một bức di ảnh trang nghiêm, rõ nét và chân thực nhất.
 
+<p align="center">
+  <img src="docs/images/before-after.jpg" alt="So sánh ảnh gốc và ảnh sau phục chế" width="100%">
+</p>
+
+<p align="center">
+  <em>Ảnh thử nghiệm do người dùng cung cấp: phục hồi khuôn mặt, tô màu và upscale 2x.</em>
+</p>
+
+## Mục lục
+
+- [Trạng thái hiện tại](#trạng-thái-hiện-tại)
+- [Kết quả thực tế](#kết-quả-thực-tế)
+- [Mục tiêu](#mục-tiêu)
+- [Nguyên tắc quan trọng](#nguyên-tắc-quan-trọng)
+- [Tech stack](#tech-stack)
+- [Pipeline 5 bước](#pipeline-5-bước)
+- [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Chạy nhanh trên Windows](#chạy-nhanh-trên-windows)
+- [Cài đặt cơ bản](#cài-đặt-cơ-bản)
+- [Chạy CLI](#chạy-cli)
+- [Chạy giao diện Streamlit](#chạy-giao-diện-streamlit)
+- [Cài đặt AI](#cài-đặt-ai-tùy-chọn)
+- [Tham số khuyến nghị](#tham-số-khuyến-nghị)
+- [Xử lý sự cố](#xử-lý-sự-cố)
+- [Kiểm thử](#kiểm-thử)
+- [Bản quyền ảnh và model](#bản-quyền-ảnh-và-model)
+- [Hướng phát triển](#hướng-phát-triển)
+- [Định hướng xã hội](#định-hướng-xã-hội)
+- [Tác giả](#tác-giả)
+
 ## Trạng thái hiện tại
 
-Khung dự án đã được tạo với pipeline CPU cơ bản chạy được bằng OpenCV:
+Pipeline đã chạy end-to-end trên CPU với đầy đủ các bước chính:
 
 - Đọc/ghi ảnh hỗ trợ đường dẫn Unicode trên Windows.
 - Khử nhiễu trung vị / Non-Local Means.
 - Cân bằng tương phản CLAHE, chỉnh gamma, làm nét unsharp mask.
 - Vá vùng hỏng bằng mask có sẵn (OpenCV Telea / Navier-Stokes).
-- Upscale bằng Lanczos (fallback CPU).
+- Upscale bằng Lanczos (fallback CPU) hoặc Real-ESRGAN.
 - Adapter cho GFPGAN, Real-ESRGAN, Caffe Colorization và DeOldify.
 - Tô màu ảnh đen trắng bằng Caffe (nhẹ, mặc định) hoặc DeOldify (tùy chọn).
 - CLI xử lý một ảnh và ứng dụng Streamlit để so sánh trước/sau.
 - GFPGAN, Real-ESRGAN và Caffe Colorization đã chạy thử thành công trên CPU.
+- Bộ test hiện có **12/12 test pass**.
 - Model AI được tải cục bộ vào `models/` (không commit vì dung lượng lớn).
-  Xem phần **Cài đặt AI**.
+  Xem phần [Cài đặt AI](#cài-đặt-ai-tùy-chọn).
+
+## Kết quả thực tế
+
+<p align="center">
+  <img src="docs/images/restored.jpg" alt="Ảnh sau phục chế" width="420">
+</p>
+
+<p align="center">
+  <em>Kết quả sau GFPGAN → Caffe Colorization → Real-ESRGAN 2x.</em>
+</p>
+
+| Hạng mục | Ảnh gốc | Sau phục chế |
+|---|---:|---:|
+| Kích thước | 388 × 515 | 776 × 1030 |
+| Khuôn mặt phát hiện | 1 | 1 |
+| Colorfulness | 5.61 | 22.93 |
+| Laplacian sharpness | 63.54 | 1388.03 |
+| Định dạng | JPG | PNG |
+
+> Các chỉ số trên chỉ dùng để kiểm tra kỹ thuật, không thay thế đánh giá bằng
+> mắt. Màu da, quân phục và phù hiệu vẫn cần con người kiểm tra theo ảnh gốc và
+> tư liệu lịch sử.
+
+Lệnh đã dùng để tạo kết quả:
+
+```bash
+python scripts/run_pipeline.py \
+  --input data/input/images.jpg \
+  --output data/output/images_restored.png \
+  --face-restore \
+  --fidelity 0.7 \
+  --colorize \
+  --colorize-engine caffe \
+  --color-strength 0.85 \
+  --color-saturation 1.0 \
+  --use-ai-upscale \
+  --upscale 2
+```
 
 ## Mục tiêu
 
@@ -78,11 +147,13 @@ DuAn_HoiSinhKyUc/
 ├── data/
 │   ├── input/                    # ảnh gốc (không commit)
 │   └── output/                   # ảnh kết quả (không commit)
+├── docs/
+│   └── images/                   # ảnh minh họa cho README
 ├── models/                       # chứa file .pth (không commit)
 │   └── colorization/             # model Caffe tô màu (không commit)
 ├── scripts/
 │   ├── run_pipeline.py           # CLI xử lý một ảnh
-│   ├── download_models.py        # tải GFPGAN / Real-ESRGAN
+│   ├── download_models.py        # tải GFPGAN / Real-ESRGAN / colorization
 │   └── patch_basicsr.py          # vá tương thích torchvision mới
 ├── src/
 │   ├── __init__.py
@@ -98,6 +169,22 @@ DuAn_HoiSinhKyUc/
     ├── test_preview.py
     └── test_ai_models.py
 ```
+
+## Chạy nhanh trên Windows
+
+```bat
+setup_ai.bat
+.venv\Scripts\python.exe scripts\download_models.py --all
+run.bat
+```
+
+Sau đó mở trình duyệt tại địa chỉ Streamlit in ra, tải ảnh lên và giữ mặc định:
+
+- **Phục hồi khuôn mặt (GFPGAN)**: bật.
+- **Tô màu bằng AI**: bật, engine `caffe`.
+- **Upscale bằng Real-ESRGAN**: bật, `2x`.
+
+Nếu chỉ muốn chạy pipeline CPU nhẹ, bỏ chọn cả ba mục AI.
 
 ## Cài đặt cơ bản
 
@@ -162,6 +249,23 @@ python scripts/run_pipeline.py \
 
 Mask phải cùng kích thước với ảnh gốc. Tạo mask bằng GIMP/Photoshop hoặc bằng
 ngưỡng sáng nếu vết hỏng có màu sắc rõ ràng.
+
+## Tham số khuyến nghị
+
+Đây là điểm khởi đầu, không phải công thức cố định. Luôn giữ ảnh gốc để so sánh.
+
+| Trường hợp | Gợi ý |
+|---|---|
+| Chân dung cũ, mờ nhẹ | `--denoise median --clahe 2 --gamma 1 --fidelity 0.7 --sharpen 0.4` |
+| Ảnh nhiễu hạt, xước nhẹ | `--denoise nlm --denoise-strength 7 --clahe 2 --fidelity 0.6` |
+| Ảnh đã khá nét | `--denoise none --clahe 1 --fidelity 0.8 --sharpen 0.2` |
+| Ảnh quá tối | `--gamma 0.8 --clahe 2` |
+| Màu bị nhân tạo | Giảm `--color-strength 0.6`, `--color-saturation 0.9` |
+| Muốn giữ nét gốc tối đa | Tăng `--fidelity 0.85`, giảm `--sharpen 0.2` |
+| Chỉ cần phóng to, không AI | `--upscale 2` và bỏ `--use-ai-upscale` |
+
+Với ảnh in di ảnh, nên xuất PNG rồi kiểm tra ở kích thước in thật. Không nên
+upscale quá 2x nếu ảnh gốc quá nhỏ, vì AI có thể tạo chi tiết không có thật.
 
 ## Chạy giao diện Streamlit
 
@@ -291,13 +395,49 @@ Lưu ý:
 - Nếu `basicsr` báo thiếu `torchvision.transforms.functional_tensor`, chạy:
   `python scripts\patch_basicsr.py`.
 
+## Xử lý sự cố
+
+| Lỗi / hiện tượng | Cách xử lý |
+|---|---|
+| `AttributeError: module 'cv2.dnn' has no attribute 'readNetFromCaffe'` | OpenCV 5 đã bỏ Caffe. Cài OpenCV 4.x: `pip install "opencv-python>=4.9,<5"` |
+| `KeyError: '__version__'` khi cài `basicsr` | Dùng Python 3.10/3.11, không dùng 3.13 |
+| Thiếu `torchvision.transforms.functional_tensor` | Chạy `python scripts\patch_basicsr.py` |
+| `Failed to remove contents in ... ~v2` | Cảnh báo vô hại; có thể xóa thủ công thư mục `~v2` trong `site-packages` |
+| Pip báo file bị khóa / `Access denied` | Đóng tiến trình đang dùng file, chạy `setup_ai.bat` để dùng cache trong dự án |
+| GFPGAN không tìm thấy khuôn mặt | Dùng ảnh chân dung rõ mặt, hoặc tắt `--face-restore` |
+| Màu da / quân phục sai | Giảm cường độ màu, bật `deoldify` nếu đã cài, hoặc chỉnh tay sau khi xuất |
+| Chạy CPU quá chậm | Cài PyTorch bản CUDA tương ứng; kiểm tra bằng `python -c "import torch; print(torch.cuda.is_available())"` |
+| Streamlit báo cổng đang dùng | Chạy `streamlit run app/streamlit_app.py --server.port 8502` |
+| Ảnh kết quả quá nét | Giảm `--sharpen` xuống `0.2` hoặc tắt upscale AI |
+
 ## Kiểm thử
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-Nếu chưa cài OpenCV, test sẽ được bỏ qua thay vì báo lỗi.
+Kết quả hiện tại: **12/12 test pass**. Bộ test kiểm tra tiền xử lý, inpainting,
+pipeline CPU, preview HTML và việc thiếu model AI. Nếu chưa cài OpenCV, một số
+test sẽ được bỏ qua thay vì báo lỗi.
+
+Kiểm tra nhanh môi trường AI:
+
+```bash
+python -c "import torch, cv2, gfpgan, realesrgan; print(torch.__version__, cv2.__version__)"
+python -c "import torch; print('CUDA:', torch.cuda.is_available())"
+python -m pip check
+```
+
+## Bản quyền ảnh và model
+
+- **Ảnh minh họa trong README** do người dùng cung cấp cho mục đích thử nghiệm.
+  Không tái sử dụng ngoài dự án khi chưa được phép.
+- **Model GFPGAN, Real-ESRGAN, Caffe Colorization** thuộc bản quyền của các tác
+  giả gốc và tuân theo giấy phép của từng dự án. Xem phần
+  [Cài đặt AI](#cài-đặt-ai-tùy-chọn) để biết nguồn tải.
+- **Mã nguồn dự án** hiện chưa kèm file `LICENSE`. Nếu muốn cho phép tái sử
+  dụng, nên bổ sung giấy phép phù hợp trước khi công bố rộng rãi.
+- Không đưa ảnh của người đã khuất lên mạng nếu gia đình chưa đồng ý.
 
 ## Hướng phát triển
 
@@ -316,3 +456,20 @@ Nếu chưa cài OpenCV, test sẽ được bỏ qua thay vì báo lỗi.
 Dự án có thể phát triển thành chiến dịch tình nguyện công nghệ, phối hợp với
 Đoàn thanh niên và cơ quan thương binh xã hội để tiếp nhận ảnh từ các gia đình
 liệt sĩ, Bà mẹ Việt Nam Anh hùng trên toàn quốc.
+
+## Tác giả
+
+- **Phan Đình Mạnh** — [@MANH-IT](https://github.com/MANH-IT)
+- Repository: <https://github.com/MANH-IT/HoiSinhKyUc>
+
+Đóng góp, báo lỗi hoặc đề xuất cải thiện xin gửi qua GitHub Issues.
+
+## Lời cảm ơn
+
+Dự án sử dụng và kế thừa ý tưởng từ các dự án mã nguồn mở:
+
+- [GFPGAN](https://github.com/TencentARC/GFPGAN)
+- [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)
+- [Colorization](https://github.com/richzhang/colorization) của Richard Zhang
+- [facexlib](https://github.com/xinntao/facexlib)
+- [Streamlit](https://streamlit.io/) và [OpenCV](https://opencv.org/)
